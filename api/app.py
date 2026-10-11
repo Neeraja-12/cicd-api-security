@@ -7,6 +7,8 @@ import sqlite3
 import os
 import bcrypt
 from dotenv import load_dotenv
+from flask_talisman import Talisman
+Talisman(app, force_https=False)
 
 load_dotenv()
 
