@@ -1,21 +1,20 @@
 """
-INTENTIONALLY VULNERABLE API for CI/CD security pipeline demo.
-The pipeline (Semgrep + Gitleaks + Trivy + ZAP) should fail on this file.
-
-Do NOT deploy this.
+SECURE API - fixed version. Pipeline should pass.
 """
 
 from flask import Flask, request, jsonify
 import sqlite3
-import hashlib
 import os
+import bcrypt
+from dotenv import load_dotenv
+from flask_talisman import Talisman
+Talisman(app, force_https=False)
+
+load_dotenv()
 
 app = Flask(__name__)
 
-# VULN: hardcoded secret (Gitleaks + Semgrep will flag)
-API_KEY = "DEMO_FAKE_KEY_FOR_CI_LAB"
-DB_PASSWORD = "supersecretpassword123"
-
+API_KEY = os.environ.get("API_KEY", "dev-key-not-used-in-prod")
 DB_PATH = "users.db"
 
 
@@ -42,8 +41,14 @@ def init_db():
 
 
 def hash_pw(pw):
-    # VULN: MD5 is weak (Semgrep: insecure-hash-algorithm-md5)
-    return hashlib.md5(pw.encode()).hexdigest()
+    return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_pw(pw, hashed):
+    try:
+        return bcrypt.checkpw(pw.encode(), hashed.encode())
+    except Exception:
+        return False
 
 
 def seed():
@@ -74,35 +79,19 @@ def login():
     password = body.get("password", "")
 
     conn = get_db()
-    # VULN: SQL injection via string formatting (Semgrep: sqlalchemy-execute-raw-query)
-    query = f"SELECT * FROM users WHERE username='{username}' AND password_hash='{hash_pw(password)}'"
-    row = conn.execute(query).fetchone()
+    row = conn.execute(
+        "SELECT * FROM users WHERE username=?", (username,)
+    ).fetchone()
     conn.close()
 
-    if not row:
+    if not row or not verify_pw(password, row["password_hash"]):
         return jsonify({"error": "invalid"}), 401
+
     return jsonify({"username": row["username"], "email": row["email"]})
-
-
-@app.route("/calc", methods=["GET"])
-def calc():
-    expr = request.args.get("expr", "1+1")
-    # VULN: eval on user input (Semgrep: eval-usage)
-    try:
-        result = eval(expr)
-        return jsonify({"result": result})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
-
-@app.route("/debug", methods=["GET"])
-def debug_info():
-    # VULN: exposes environment variables
-    return jsonify({"env": dict(os.environ)})
 
 
 if __name__ == "__main__":
     init_db()
     seed()
-    # VULN: debug=True in production
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=5001, debug=debug)
