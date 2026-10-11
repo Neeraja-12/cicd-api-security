@@ -1,0 +1,105 @@
+name: API Security Pipeline
+
+on:
+  push:
+    branches: [main, secure]
+  pull_request:
+    branches: [main, secure]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  sast-semgrep:
+    name: SAST - Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Run Semgrep
+        run: |
+          semgrep \
+            --config .semgrep.yml \
+            --config p/python \
+            --config p/owasp-top-ten \
+            --error \
+            --sarif --output semgrep.sarif
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  secrets-gitleaks:
+    name: Secrets - Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  sca-trivy:
+    name: SCA - Trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          format: sarif
+          output: trivy.sarif
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  dast-zap:
+    name: DAST - OWASP ZAP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start API in Docker
+        run: |
+          docker build -t cicd-api ./api
+          docker run -d --name cicd-api -p 5001:5001 cicd-api
+          sleep 5
+
+      - name: Verify API is up
+        run: curl -s http://localhost:5001/health
+
+      - name: ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: http://localhost:5001
+          fail_action: true
+          allow_issue_writing: false
+
+      - name: Stop API
+        if: always()
+        run: docker stop cicd-api || true

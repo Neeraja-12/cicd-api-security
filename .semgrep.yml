@@ -1,0 +1,41 @@
+rules:
+  - id: hardcoded-api-key
+    languages: [python]
+    severity: ERROR
+    message: Potential hardcoded API key or secret detected
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "DEMO_FAKE_KEY_FOR_CI_LAB"
+          - pattern: $VAR = "sk_test_..."
+          - pattern: $VAR = "AKIA..."
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  - id: md5-usage
+    languages: [python]
+    severity: WARNING
+    message: MD5 is cryptographically weak; use SHA-256 or bcrypt
+    pattern: hashlib.md5(...)
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+
+  - id: eval-on-user-input
+    languages: [python]
+    severity: ERROR
+    message: Avoid eval() on untrusted input
+    pattern: eval(...)
+    metadata:
+      category: security
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+
+  - id: sql-string-format
+    languages: [python]
+    severity: ERROR
+    message: Possible SQL injection from string formatting in SQL query
+    patterns:
+      - pattern: $CONN.execute(f"...")
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"

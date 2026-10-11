@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+venv/
+.vscode/
+.idea/
+*.log
+.DS_Store
+zap-report.html
+zap-report.json

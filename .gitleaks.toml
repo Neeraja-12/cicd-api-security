@@ -1,0 +1,19 @@
+title = "gitleaks config"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "demo-fake-api-key"
+description = "Demo fake API key for CI lab"
+regex = '''DEMO_FAKE_KEY_FOR_CI_LAB'''
+tags = ["key", "demo"]
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+    '''.git/''',
+    '''README.md''',
+    '''FINDINGS.md''',
+    '''.semgrep.yml''',
+    '''.gitleaks.toml''',
+]
